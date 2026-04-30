@@ -23,6 +23,26 @@ more of its resources on the work or game in front of the user.
 - Include responsible adware and malware cleanup helpers.
 - Give users clear visibility into what will be changed before applying actions.
 
+## Current Functionality
+
+### Modern App Shell
+
+- Borderless Windows Forms UI with a custom title bar.
+- Sidebar navigation for Overview, Cleaner, Performance, Security, Tools, and
+  Info pages.
+- Runtime page hosting so the design-time tab container stays hidden while the
+  app presents a cleaner single-page view.
+
+### Info View
+
+- Live CPU usage, live CPU operating GHz, RAM usage, GPU usage, GPU clocks,
+  temperatures, and top resource processes.
+- Detailed system specs covering Windows, motherboard/firmware, CPU, RAM, GPU,
+  disks, sensors, and hardware notes.
+- GPU and process telemetry use Windows performance counters; temperatures and
+  GPU clock sensors use LibreHardwareMonitor when the hardware and drivers expose
+  those readings.
+
 ## Planned Features
 
 ### System Cleanup
@@ -85,6 +105,9 @@ features should follow these principles:
 - C#
 - Windows Forms
 - .NET Framework 4.8
+- System.Management / WMI
+- Windows performance counters
+- LibreHardwareMonitorLib
 - Visual Studio / MSBuild
 
 ## Development
@@ -110,7 +133,7 @@ Logai\bin\Debug\Logai.exe
 
 ## Roadmap
 
-- Build the core modern Windows desktop UI.
+- Expand the core modern Windows desktop UI beyond placeholder pages.
 - Add a cleanup scan with itemized results.
 - Add safe cleanup execution with logs.
 - Add startup app and service review tools.

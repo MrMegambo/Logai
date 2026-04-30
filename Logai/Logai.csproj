@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -22,6 +22,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -31,11 +32,20 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject>Logai.Program</StartupObject>
+    <LibreHardwareMonitorLibVersion>0.9.6</LibreHardwareMonitorLibVersion>
+  </PropertyGroup>
+  <PropertyGroup>
+    <NuGetPackageRoot Condition=" '$(NuGetPackageRoot)' == '' ">$(UserProfile)\.nuget\packages\</NuGetPackageRoot>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="LibreHardwareMonitorLib">
+      <HintPath>$(NuGetPackageRoot)librehardwaremonitorlib\$(LibreHardwareMonitorLibVersion)\runtimes\win-x64\lib\net472\LibreHardwareMonitorLib.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System">
       <HintPath>..\..\..\..\..\..\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8\System.dll</HintPath>
     </Reference>
@@ -46,6 +56,7 @@
     <Reference Include="System.Data" />
     <Reference Include="System.Deployment" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Management" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
@@ -56,6 +67,9 @@
     </Compile>
     <Compile Include="Form1.Designer.cs">
       <DependentUpon>Form1.cs</DependentUpon>
+    </Compile>
+    <Compile Include="PageHostTabControl.cs">
+      <SubType>Component</SubType>
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -84,5 +98,17 @@
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="LibreHardwareMonitorLib" Version="$(LibreHardwareMonitorLibVersion)" />
+  </ItemGroup>
+  <Target Name="CopyLibreHardwareMonitorRuntime" AfterTargets="Build">
+    <PropertyGroup>
+      <LibreHardwareMonitorRuntimeRid>win-x64</LibreHardwareMonitorRuntimeRid>
+      <LibreHardwareMonitorRuntimeRid Condition=" '$(PlatformTarget)' == 'x86' ">win-x86</LibreHardwareMonitorRuntimeRid>
+      <LibreHardwareMonitorRuntimeRid Condition=" '$(PlatformTarget)' == 'ARM64' ">win-arm64</LibreHardwareMonitorRuntimeRid>
+      <LibreHardwareMonitorRuntimeDll>$(NuGetPackageRoot)librehardwaremonitorlib\$(LibreHardwareMonitorLibVersion)\runtimes\$(LibreHardwareMonitorRuntimeRid)\lib\net472\LibreHardwareMonitorLib.dll</LibreHardwareMonitorRuntimeDll>
+    </PropertyGroup>
+    <Copy SourceFiles="$(LibreHardwareMonitorRuntimeDll)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" Condition="Exists('$(LibreHardwareMonitorRuntimeDll)')" />
+  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
