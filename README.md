@@ -131,6 +131,34 @@ The debug executable is generated at:
 Logai\bin\Debug\Logai.exe
 ```
 
+### Runtime Dependencies
+
+Logai targets .NET Framework 4.8 and depends on Windows system assemblies for
+WinForms, WMI, drawing, networking, XML, and performance counter access. Those
+framework assemblies are provided by the installed .NET Framework runtime.
+
+The hardware sensor stack also requires these app-local DLL files to stay in the
+same folder as `Logai.exe`; copy or publish the complete output folder, not just
+the executable.
+
+| DLL | Minimum checked assembly version | Purpose |
+| --- | --- | --- |
+| `LibreHardwareMonitorLib.dll` | `0.9.6.0` | Hardware sensors, GPU clocks, temperatures, and related telemetry. |
+| `BlackSharp.Core.dll` | `1.0.7.0` | LibreHardwareMonitor support dependency. |
+| `DiskInfoToolkit.dll` | `1.1.2.0` | Storage hardware information used by the sensor stack. |
+| `HidSharp.dll` | `2.6.4.0` | HID device access used by supported hardware sensors. |
+| `RAMSPDToolkit-NDD.dll` | `1.4.2.0` | Memory module/SPD support dependency. |
+| `System.Buffers.dll` | `4.0.5.0` | Microsoft runtime support library. |
+| `System.Memory.dll` | `4.0.5.0` | Microsoft runtime support library. |
+| `System.Numerics.Vectors.dll` | `4.1.6.0` | Microsoft vector runtime support library. |
+| `System.Runtime.CompilerServices.Unsafe.dll` | `6.0.3.0` | Microsoft runtime support library. |
+
+At startup, Logai validates those local DLLs before loading the main form. The
+check verifies that each required DLL exists, has the expected managed assembly
+identity, meets the minimum known-good assembly version, and that Logai is
+running as a 64-bit process for the LibreHardwareMonitor runtime. Strong-name
+public key tokens are also checked for the signed Microsoft runtime assemblies.
+
 ## Roadmap
 
 - Expand the core modern Windows desktop UI beyond placeholder pages.
