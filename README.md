@@ -137,6 +137,11 @@ Logai targets .NET Framework 4.8 and depends on Windows system assemblies for
 WinForms, WMI, drawing, networking, XML, and performance counter access. Those
 framework assemblies are provided by the installed .NET Framework runtime.
 
+Logai also requires administrator privileges at startup. The application checks
+its elevation state before loading the main form and relaunches itself through
+Windows UAC when needed. If elevation is denied or cannot be requested, Logai
+shows an error message and exits.
+
 The hardware sensor stack also requires these app-local DLL files to stay in the
 same folder as `Logai.exe`; copy or publish the complete output folder, not just
 the executable.
