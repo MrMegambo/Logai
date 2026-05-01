@@ -55,7 +55,6 @@ namespace Logai
             }
 
             message.AppendLine();
-            message.AppendLine("Fix: rebuild the project or copy the complete build output folder together.");
             message.AppendLine("The required DLL files must stay in the same folder as Logai.exe.");
 
             return message.ToString();
