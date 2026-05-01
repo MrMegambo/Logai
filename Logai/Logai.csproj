@@ -36,7 +36,6 @@
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject>Logai.Program</StartupObject>
-    <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
     <LibreHardwareMonitorLibVersion>0.9.6</LibreHardwareMonitorLibVersion>
   </PropertyGroup>
   <PropertyGroup>
@@ -99,7 +98,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
-    <None Include="Properties\app.manifest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="LibreHardwareMonitorLib" Version="$(LibreHardwareMonitorLibVersion)" />
