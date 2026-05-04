@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Management;
 using System.Runtime.InteropServices;
@@ -31,6 +32,7 @@ namespace Logai
         private const string CpuActualFrequencyCounterName = "Actual Frequency";
         private const string CpuBaseFrequencyCounterName = "Processor Frequency";
         private const string CpuPerformanceCounterName = "% Processor Performance";
+        private const double CpuClockRangeDisplayThresholdMHz = 0.5D;
 
         private static readonly Color ThemeColor = Color.FromArgb(15, 15, 15);
         private static readonly Color SidebarColor = Color.FromArgb(20, 20, 20);
@@ -46,6 +48,7 @@ namespace Logai
         private static readonly Color AccentCyan = Color.FromArgb(80, 220, 230);
 
         private readonly System.Windows.Forms.Timer infoRefreshTimer = new System.Windows.Forms.Timer();
+        private readonly System.Windows.Forms.Timer memoryRefreshTimer = new System.Windows.Forms.Timer();
         private readonly CancellationTokenSource infoRefreshCancellation = new CancellationTokenSource();
         private readonly object cpuCountersSync = new object();
         private readonly object hardwareMonitorSync = new object();
@@ -67,6 +70,7 @@ namespace Logai
         private Computer hardwareMonitor;
         private string reportedCpuBaseClockGHz;
         private bool hardwareMonitorOpenFailed;
+        private bool infoCountersInitialized;
         private bool infoRefreshInProgress;
         private bool specsLoading;
         private bool specsLoaded;
@@ -129,7 +133,9 @@ namespace Logai
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             infoRefreshCancellation.Cancel();
+            memoryRefreshTimer.Stop();
             infoRefreshTimer.Stop();
+            memoryRefreshTimer.Dispose();
             infoRefreshTimer.Dispose();
             cpuCounter?.Dispose();
             cpuActualFrequencyCounter?.Dispose();
@@ -197,29 +203,44 @@ namespace Logai
         {
             infoRefreshTimer.Interval = 1000;
             infoRefreshTimer.Tick += infoRefreshTimer_Tick;
+            memoryRefreshTimer.Interval = 500;
+            memoryRefreshTimer.Tick += memoryRefreshTimer_Tick;
             liveCpuClockLabel.AutoEllipsis = true;
+            liveRamLabel.AutoEllipsis = true;
             liveGpuLabel.AutoEllipsis = true;
             liveGpuClockLabel.AutoEllipsis = true;
             liveTempLabel.AutoEllipsis = true;
+        }
 
-            if (IsDesignerHosted())
+        private void EnsureInfoCountersInitialized()
+        {
+            if (infoCountersInitialized || IsDesignerHosted())
             {
                 return;
             }
 
-            try
+            lock (cpuCountersSync)
             {
-                cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
-                cpuCounter.NextValue();
-            }
-            catch
-            {
-                cpuCounter = null;
-            }
+                if (infoCountersInitialized)
+                {
+                    return;
+                }
 
-            cpuActualFrequencyCounter = TryCreatePerformanceCounter(CpuInformationCategoryName, CpuActualFrequencyCounterName, "_Total");
-            cpuBaseFrequencyCounter = TryCreatePerformanceCounter(CpuInformationCategoryName, CpuBaseFrequencyCounterName, "_Total");
-            cpuPerformanceCounter = TryCreatePerformanceCounter(CpuInformationCategoryName, CpuPerformanceCounterName, "_Total");
+                try
+                {
+                    cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+                    cpuCounter.NextValue();
+                }
+                catch
+                {
+                    cpuCounter = null;
+                }
+
+                cpuActualFrequencyCounter = TryCreatePerformanceCounter(CpuInformationCategoryName, CpuActualFrequencyCounterName, "_Total");
+                cpuBaseFrequencyCounter = TryCreatePerformanceCounter(CpuInformationCategoryName, CpuBaseFrequencyCounterName, "_Total");
+                cpuPerformanceCounter = TryCreatePerformanceCounter(CpuInformationCategoryName, CpuPerformanceCounterName, "_Total");
+                infoCountersInitialized = true;
+            }
         }
 
         private void ApplyNavAccent(Button button, Color accentColor)
@@ -404,10 +425,13 @@ namespace Logai
                 }
 
                 Task ignored = RefreshInfoAsync();
+                UpdateLiveMemoryUsageLabel();
+                memoryRefreshTimer.Start();
                 infoRefreshTimer.Start();
             }
             else
             {
+                memoryRefreshTimer.Stop();
                 infoRefreshTimer.Stop();
             }
         }
@@ -415,6 +439,11 @@ namespace Logai
         private async void infoRefreshTimer_Tick(object sender, EventArgs e)
         {
             await RefreshInfoAsync();
+        }
+
+        private void memoryRefreshTimer_Tick(object sender, EventArgs e)
+        {
+            UpdateLiveMemoryUsageLabel();
         }
 
         private async void BeginLoadSystemSpecs()
@@ -442,6 +471,128 @@ namespace Logai
             {
                 specsLoading = false;
             }
+        }
+
+        private async void saveSpecsButton_Click(object sender, EventArgs e)
+        {
+            using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+            {
+                saveFileDialog.Title = "Save PC information";
+                saveFileDialog.Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*";
+                saveFileDialog.DefaultExt = "txt";
+                saveFileDialog.AddExtension = true;
+                saveFileDialog.OverwritePrompt = true;
+                saveFileDialog.FileName = "Logai-PC-Info-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".txt";
+
+                string documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                if (!string.IsNullOrWhiteSpace(documentsPath) && Directory.Exists(documentsPath))
+                {
+                    saveFileDialog.InitialDirectory = documentsPath;
+                }
+
+                if (saveFileDialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                await SaveSystemSpecsAsync(saveFileDialog.FileName);
+            }
+        }
+
+        private async Task SaveSystemSpecsAsync(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                return;
+            }
+
+            bool previousEnabledState = saveSpecsButton.Enabled;
+            string previousButtonText = saveSpecsButton.Text;
+            Cursor previousCursor = Cursor;
+
+            try
+            {
+                saveSpecsButton.Enabled = false;
+                saveSpecsButton.Text = "Saving...";
+                Cursor = Cursors.WaitCursor;
+
+                string specsText = await GetSystemSpecsTextForSaveAsync();
+                string directoryPath = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrWhiteSpace(directoryPath))
+                {
+                    Directory.CreateDirectory(directoryPath);
+                }
+
+                File.WriteAllText(filePath, specsText, new UTF8Encoding(false));
+
+                MessageBox.Show(
+                    "PC information saved successfully." + Environment.NewLine + filePath,
+                    "Save complete",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                ShowSaveSpecsError("Logai does not have permission to write to that location.", ex);
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                ShowSaveSpecsError("The selected folder no longer exists.", ex);
+            }
+            catch (IOException ex)
+            {
+                ShowSaveSpecsError("Windows could not write the PC information file.", ex);
+            }
+            catch (Exception ex)
+            {
+                ShowSaveSpecsError("Logai could not save the PC information file.", ex);
+            }
+            finally
+            {
+                Cursor = previousCursor;
+                saveSpecsButton.Text = previousButtonText;
+                saveSpecsButton.Enabled = previousEnabledState;
+            }
+        }
+
+        private async Task<string> GetSystemSpecsTextForSaveAsync()
+        {
+            specsLoading = true;
+            specsTextBox.Text = "Loading detailed system information...";
+
+            try
+            {
+                string specs = await Task.Run(() => BuildSystemSpecsText());
+                if (!IsDisposed)
+                {
+                    specsTextBox.Text = specs;
+                    specsLoaded = true;
+                }
+
+                return specs;
+            }
+            catch (Exception ex)
+            {
+                if (!IsDisposed)
+                {
+                    specsTextBox.Text = "Unable to load system information." + Environment.NewLine + ex.Message;
+                }
+
+                throw;
+            }
+            finally
+            {
+                specsLoading = false;
+            }
+        }
+
+        private void ShowSaveSpecsError(string message, Exception exception)
+        {
+            MessageBox.Show(
+                message + Environment.NewLine + Environment.NewLine + exception.Message,
+                "Save failed",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
 
         private async Task RefreshInfoAsync()
@@ -472,7 +623,7 @@ namespace Logai
                 {
                     liveCpuLabel.Text = "CPU: refresh unavailable";
                     liveCpuClockLabel.Text = "CPU Live GHz: refresh unavailable";
-                    liveRamLabel.Text = "RAM: refresh unavailable";
+                    liveRamLabel.Text = "RAM Usage: refresh unavailable";
                     liveGpuLabel.Text = "GPU: refresh unavailable";
                     liveGpuClockLabel.Text = "GPU Live GHz: refresh unavailable";
                     liveTempLabel.Text = "Temps: refresh unavailable";
@@ -487,11 +638,13 @@ namespace Logai
         private InfoSnapshot CollectInfoSnapshot(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            EnsureInfoCountersInitialized();
+            cancellationToken.ThrowIfCancellationRequested();
             GpuUsageSnapshot gpuUsage = GetGpuUsageByProcess(cancellationToken);
             Dictionary<int, long> gpuMemoryByPid = GetGpuMemoryByProcess(cancellationToken);
             HardwareSensorSnapshot hardwareSensors = GetHardwareSensorSnapshot();
             cancellationToken.ThrowIfCancellationRequested();
-            CpuClockSnapshot cpuClock = GetCurrentCpuClockSnapshot();
+            CpuClockSnapshot cpuClock = GetCurrentCpuClockSnapshot(hardwareSensors.CpuClock);
 
             return new InfoSnapshot(
                 GetCpuUsage(),
@@ -510,7 +663,7 @@ namespace Logai
             liveCpuClockLabel.Text = snapshot.CpuClockSummary == "--"
                 ? "CPU Live GHz: --"
                 : "CPU Live GHz: " + snapshot.CpuClockSummary + FormatCpuClockContext(snapshot.CpuBaseClockGHz);
-            liveRamLabel.Text = $"RAM: {FormatBytes(snapshot.Memory.UsedBytes)} / {FormatBytes(snapshot.Memory.TotalBytes)} ({snapshot.Memory.MemoryLoadPercent:0}%)";
+            UpdateLiveMemoryUsageLabel(snapshot.Memory);
             liveGpuLabel.Text = "GPU Usage: " + snapshot.GpuSummary;
             liveGpuClockLabel.Text = string.IsNullOrWhiteSpace(snapshot.GpuClockSummary)
                 ? "GPU Live GHz: --"
@@ -551,7 +704,7 @@ namespace Logai
                 GetFirmwareSecurityInfo(),
                 GetVirtualizationInfo());
             AppendInfoSection(specs, "CPU", GetCpuInfo());
-            AppendInfoSection(specs, "RAM", GetMemoryInfo());
+            AppendInfoSection(specs, "RAM", GetMemoryInfo(), GetLiveMemoryUsageInfo());
             AppendInfoSection(specs, "GPU", GetGpuInfo());
             AppendInfoSection(specs, "DISKS", GetStorageInfo());
             AppendInfoSection(specs, "SENSORS", GetTemperatureInfo());
@@ -1028,6 +1181,68 @@ namespace Logai
                 MemoryStatus memory = GetMemoryStatus();
                 return $"{FormatBytes(memory.TotalBytes)} installed | Speed unavailable";
             }
+        }
+
+        private string GetLiveMemoryUsageInfo()
+        {
+            MemoryStatus memory = GetMemoryStatus();
+            if (memory.TotalBytes <= 0L)
+            {
+                return "Live usage unavailable";
+            }
+
+            long availableBytes = Math.Max(0L, memory.TotalBytes - memory.UsedBytes);
+            return "Live usage: " +
+                FormatBytes(memory.UsedBytes) +
+                " used / " +
+                FormatBytes(memory.TotalBytes) +
+                " total (" +
+                memory.MemoryLoadPercent.ToString("0", CultureInfo.InvariantCulture) +
+                "%) | " +
+                FormatBytes(availableBytes) +
+                " available";
+        }
+
+        private void UpdateLiveMemoryUsageLabel()
+        {
+            UpdateLiveMemoryUsageLabel(GetMemoryStatus());
+        }
+
+        private void UpdateLiveMemoryUsageLabel(MemoryStatus memory)
+        {
+            try
+            {
+                liveRamLabel.Text = "RAM Usage: " + FormatMemoryUsageSummary(memory);
+            }
+            catch
+            {
+                liveRamLabel.Text = "RAM Usage: refresh unavailable";
+            }
+        }
+
+        private string FormatMemoryUsageSummary(MemoryStatus memory)
+        {
+            if (memory.TotalBytes <= 0L)
+            {
+                return "--";
+            }
+
+            const double gibibyte = 1024D * 1024D * 1024D;
+            if (memory.TotalBytes >= (long)gibibyte)
+            {
+                return FormatPercent(memory.MemoryLoadPercent) +
+                    " | " +
+                    (memory.UsedBytes / gibibyte).ToString("0.00", CultureInfo.InvariantCulture) +
+                    "/" +
+                    (memory.TotalBytes / gibibyte).ToString("0.00", CultureInfo.InvariantCulture) +
+                    " GB";
+            }
+
+            return FormatPercent(memory.MemoryLoadPercent) +
+                " | " +
+                FormatBytes(memory.UsedBytes) +
+                " / " +
+                FormatBytes(memory.TotalBytes);
         }
 
         private string GetGpuInfo()
@@ -1669,33 +1884,35 @@ namespace Logai
         {
             try
             {
-                List<ClockReading> clockReadings = new List<ClockReading>();
+                List<ClockReading> cpuClockReadings = new List<ClockReading>();
+                List<ClockReading> gpuClockReadings = new List<ClockReading>();
                 List<TemperatureReading> temperatureReadings = new List<TemperatureReading>();
 
                 lock (hardwareMonitorSync)
                 {
                     if (!TryEnsureHardwareMonitor())
                     {
-                        return new HardwareSensorSnapshot(string.Empty, string.Empty);
+                        return new HardwareSensorSnapshot(new CpuClockSnapshot(0D, 0D, 0D, 0), string.Empty, string.Empty);
                     }
 
                     hardwareMonitor.Accept(hardwareUpdateVisitor);
 
                     foreach (IHardware hardware in hardwareMonitor.Hardware)
                     {
-                        CollectHardwareClockReadings(hardware, clockReadings);
+                        CollectHardwareClockReadings(hardware, cpuClockReadings, gpuClockReadings);
                         CollectHardwareTemperatures(hardware, temperatureReadings);
                     }
                 }
 
                 return new HardwareSensorSnapshot(
-                    BuildGpuClockSummary(clockReadings),
+                    BuildCpuClockSnapshot(cpuClockReadings),
+                    BuildGpuClockSummary(gpuClockReadings),
                     BuildTemperatureSummary(temperatureReadings));
             }
             catch (Exception ex)
             {
                 TraceDiagnostic("Hardware sensor refresh failed", ex);
-                return new HardwareSensorSnapshot(string.Empty, string.Empty);
+                return new HardwareSensorSnapshot(new CpuClockSnapshot(0D, 0D, 0D, 0), string.Empty, string.Empty);
             }
         }
 
@@ -1768,14 +1985,17 @@ namespace Logai
             }
         }
 
-        private void CollectHardwareClockReadings(IHardware hardware, List<ClockReading> readings)
+        private void CollectHardwareClockReadings(IHardware hardware, List<ClockReading> cpuReadings, List<ClockReading> gpuReadings)
         {
             if (hardware == null)
             {
                 return;
             }
 
-            if (IsGpuHardware(hardware.HardwareType))
+            bool isCpuHardware = hardware.HardwareType == HardwareType.Cpu;
+            bool isGpuHardware = IsGpuHardware(hardware.HardwareType);
+
+            if (isCpuHardware || isGpuHardware)
             {
                 foreach (ISensor sensor in hardware.Sensors ?? Enumerable.Empty<ISensor>())
                 {
@@ -1787,14 +2007,22 @@ namespace Logai
                     double megahertz = sensor.Value.Value;
                     if (megahertz > 0D && megahertz < 50000D)
                     {
-                        readings.Add(new ClockReading(hardware.Name, sensor.Name, megahertz));
+                        ClockReading reading = new ClockReading(hardware.Name, sensor.Name, megahertz);
+                        if (isCpuHardware)
+                        {
+                            cpuReadings.Add(reading);
+                        }
+                        else
+                        {
+                            gpuReadings.Add(reading);
+                        }
                     }
                 }
             }
 
             foreach (IHardware childHardware in hardware.SubHardware ?? Enumerable.Empty<IHardware>())
             {
-                CollectHardwareClockReadings(childHardware, readings);
+                CollectHardwareClockReadings(childHardware, cpuReadings, gpuReadings);
             }
         }
 
@@ -1828,6 +2056,46 @@ namespace Logai
             {
                 CollectHardwareTemperatures(childHardware, readings);
             }
+        }
+
+        private CpuClockSnapshot BuildCpuClockSnapshot(List<ClockReading> readings)
+        {
+            if (readings.Count == 0)
+            {
+                return new CpuClockSnapshot(0D, 0D, 0D, 0);
+            }
+
+            List<double> coreClockValues = readings
+                .Where(IsCpuCoreClockReading)
+                .Select(reading => reading.Megahertz)
+                .ToList();
+
+            if (coreClockValues.Count == 0)
+            {
+                coreClockValues = readings
+                    .Where(reading => reading.Megahertz >= 500D)
+                    .Select(reading => reading.Megahertz)
+                    .ToList();
+            }
+
+            return coreClockValues.Count == 0
+                ? new CpuClockSnapshot(0D, 0D, 0D, 0)
+                : new CpuClockSnapshot(coreClockValues.Average(), coreClockValues.Min(), coreClockValues.Max(), coreClockValues.Count);
+        }
+
+        private bool IsCpuCoreClockReading(ClockReading reading)
+        {
+            string normalized = (reading.SensorName ?? string.Empty).ToUpperInvariant();
+            if (normalized.Contains("BUS") ||
+                normalized.Contains("RING") ||
+                normalized.Contains("UNCORE") ||
+                normalized.Contains("MEMORY") ||
+                normalized.Contains("GRAPHICS"))
+            {
+                return false;
+            }
+
+            return normalized.Contains("CORE") || normalized.Contains("EFFECTIVE");
         }
 
         private string BuildGpuClockSummary(List<ClockReading> readings)
@@ -2132,10 +2400,21 @@ namespace Logai
             }
         }
 
-        private CpuClockSnapshot GetCurrentCpuClockSnapshot()
+        private CpuClockSnapshot GetCurrentCpuClockSnapshot(CpuClockSnapshot hardwareSensorSnapshot)
         {
+            if (hardwareSensorSnapshot.IsAvailable)
+            {
+                return hardwareSensorSnapshot;
+            }
+
             lock (cpuCountersSync)
             {
+                CpuClockSnapshot taskManagerStyleSnapshot = GetTaskManagerStyleCpuClockSnapshot();
+                if (taskManagerStyleSnapshot.IsAvailable)
+                {
+                    return taskManagerStyleSnapshot;
+                }
+
                 CpuClockSnapshot perCoreSnapshot = GetPerCoreCpuClockSnapshot();
                 if (perCoreSnapshot.IsAvailable)
                 {
@@ -2147,14 +2426,19 @@ namespace Logai
                 {
                     return new CpuClockSnapshot(actualFrequency, actualFrequency, actualFrequency, 1);
                 }
+            }
 
-                double baseFrequency = GetPerformanceCounterValue(cpuBaseFrequencyCounter);
-                double performancePercent = GetPerformanceCounterValue(cpuPerformanceCounter);
-                if (baseFrequency > 0D && performancePercent > 0D)
-                {
-                    double estimatedFrequency = baseFrequency * performancePercent / 100D;
-                    return new CpuClockSnapshot(estimatedFrequency, estimatedFrequency, estimatedFrequency, 1);
-                }
+            return new CpuClockSnapshot(0D, 0D, 0D, 0);
+        }
+
+        private CpuClockSnapshot GetTaskManagerStyleCpuClockSnapshot()
+        {
+            double baseFrequency = GetPerformanceCounterValue(cpuBaseFrequencyCounter);
+            double performancePercent = GetPerformanceCounterValue(cpuPerformanceCounter);
+            if (baseFrequency > 0D && performancePercent > 0D)
+            {
+                double estimatedFrequency = baseFrequency * performancePercent / 100D;
+                return new CpuClockSnapshot(estimatedFrequency, estimatedFrequency, estimatedFrequency, 1);
             }
 
             return new CpuClockSnapshot(0D, 0D, 0D, 0);
@@ -2302,7 +2586,12 @@ namespace Logai
 
             long totalBytes = unchecked((long)memoryStatus.TotalPhys);
             long availableBytes = unchecked((long)memoryStatus.AvailPhys);
-            return new MemoryStatus(totalBytes, Math.Max(0L, totalBytes - availableBytes), memoryStatus.MemoryLoad);
+            long usedBytes = Math.Max(0L, totalBytes - availableBytes);
+            double memoryLoadPercent = totalBytes > 0L
+                ? usedBytes * 100D / totalBytes
+                : memoryStatus.MemoryLoad;
+
+            return new MemoryStatus(totalBytes, usedBytes, memoryLoadPercent);
         }
 
         private string MHzToGHz(object megahertz)
@@ -2330,7 +2619,8 @@ namespace Logai
 
             string average = FormatCpuClockGHz(snapshot.AverageMHz);
 
-            if (snapshot.LogicalProcessorCount <= 1 || Math.Abs(snapshot.MaximumMHz - snapshot.MinimumMHz) < 25D)
+            if (snapshot.LogicalProcessorCount <= 1 ||
+                Math.Abs(snapshot.MaximumMHz - snapshot.MinimumMHz) < CpuClockRangeDisplayThresholdMHz)
             {
                 return average;
             }
@@ -2536,11 +2826,14 @@ namespace Logai
 
         private struct HardwareSensorSnapshot
         {
-            public HardwareSensorSnapshot(string gpuClockSummary, string temperatureSummary)
+            public HardwareSensorSnapshot(CpuClockSnapshot cpuClock, string gpuClockSummary, string temperatureSummary)
             {
+                CpuClock = cpuClock;
                 GpuClockSummary = gpuClockSummary;
                 TemperatureSummary = temperatureSummary;
             }
+
+            public CpuClockSnapshot CpuClock { get; }
 
             public string GpuClockSummary { get; }
 

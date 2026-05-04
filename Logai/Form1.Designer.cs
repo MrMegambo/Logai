@@ -63,6 +63,7 @@ namespace Logai
             this.infoTitleLabel = new System.Windows.Forms.Label();
             this.infoSubtitleLabel = new System.Windows.Forms.Label();
             this.specsTextBox = new System.Windows.Forms.TextBox();
+            this.saveSpecsButton = new System.Windows.Forms.Button();
             this.liveCpuLabel = new System.Windows.Forms.Label();
             this.liveCpuClockLabel = new System.Windows.Forms.Label();
             this.liveRamLabel = new System.Windows.Forms.Label();
@@ -563,6 +564,7 @@ namespace Logai
             this.infoPanel.Controls.Add(this.liveRamLabel);
             this.infoPanel.Controls.Add(this.liveCpuClockLabel);
             this.infoPanel.Controls.Add(this.liveCpuLabel);
+            this.infoPanel.Controls.Add(this.saveSpecsButton);
             this.infoPanel.Controls.Add(this.specsTextBox);
             this.infoPanel.Controls.Add(this.infoSubtitleLabel);
             this.infoPanel.Controls.Add(this.infoTitleLabel);
@@ -609,9 +611,27 @@ namespace Logai
             this.specsTextBox.Name = "specsTextBox";
             this.specsTextBox.ReadOnly = true;
             this.specsTextBox.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.specsTextBox.Size = new System.Drawing.Size(768, 166);
+            this.specsTextBox.Size = new System.Drawing.Size(768, 136);
             this.specsTextBox.TabIndex = 2;
             this.specsTextBox.Text = "Select Info to load detailed system specs.";
+            //
+            // saveSpecsButton
+            //
+            this.saveSpecsButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.saveSpecsButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(34)))), ((int)(((byte)(34)))), ((int)(((byte)(34)))));
+            this.saveSpecsButton.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(80)))), ((int)(((byte)(220)))), ((int)(((byte)(230)))));
+            this.saveSpecsButton.FlatAppearance.MouseDownBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.saveSpecsButton.FlatAppearance.MouseOverBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(33)))), ((int)(((byte)(55)))), ((int)(((byte)(60)))));
+            this.saveSpecsButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.saveSpecsButton.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this.saveSpecsButton.ForeColor = System.Drawing.Color.White;
+            this.saveSpecsButton.Location = new System.Drawing.Point(660, 222);
+            this.saveSpecsButton.Name = "saveSpecsButton";
+            this.saveSpecsButton.Size = new System.Drawing.Size(136, 26);
+            this.saveSpecsButton.TabIndex = 3;
+            this.saveSpecsButton.Text = "Save PC info...";
+            this.saveSpecsButton.UseVisualStyleBackColor = false;
+            this.saveSpecsButton.Click += new System.EventHandler(this.saveSpecsButton_Click);
             //
             // liveCpuLabel
             //
@@ -638,13 +658,14 @@ namespace Logai
             //
             // liveRamLabel
             //
+            this.liveRamLabel.AutoEllipsis = true;
             this.liveRamLabel.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             this.liveRamLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(67)))), ((int)(((byte)(209)))), ((int)(((byte)(139)))));
             this.liveRamLabel.Location = new System.Drawing.Point(28, 302);
             this.liveRamLabel.Name = "liveRamLabel";
-            this.liveRamLabel.Size = new System.Drawing.Size(260, 22);
+            this.liveRamLabel.Size = new System.Drawing.Size(274, 22);
             this.liveRamLabel.TabIndex = 5;
-            this.liveRamLabel.Text = "RAM: --";
+            this.liveRamLabel.Text = "RAM Usage: --";
             this.liveRamLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             //
             // liveGpuLabel
@@ -822,6 +843,7 @@ namespace Logai
         private System.Windows.Forms.Label infoTitleLabel;
         private System.Windows.Forms.Label infoSubtitleLabel;
         private System.Windows.Forms.TextBox specsTextBox;
+        private System.Windows.Forms.Button saveSpecsButton;
         private System.Windows.Forms.Label liveCpuLabel;
         private System.Windows.Forms.Label liveCpuClockLabel;
         private System.Windows.Forms.Label liveRamLabel;

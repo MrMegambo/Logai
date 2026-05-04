@@ -35,10 +35,15 @@ more of its resources on the work or game in front of the user.
 
 ### Info View
 
-- Live CPU usage, live CPU operating GHz, RAM usage, GPU usage, GPU clocks,
+- Live CPU usage, live CPU operating GHz, live RAM usage, GPU usage, GPU clocks,
   temperatures, and top resource processes.
+- CPU clock display prefers hardware sensor core clocks when exposed by
+  LibreHardwareMonitor, then falls back to the Windows performance counter
+  calculation used for Task-Manager-style live speed reporting.
 - Detailed system specs covering Windows, motherboard/firmware, CPU, RAM, GPU,
   disks, sensors, and hardware notes.
+- Save PC information, including the current live RAM usage snapshot, from the
+  Info view to a user-selected `.txt` file.
 - GPU and process telemetry use Windows performance counters; temperatures and
   GPU clock sensors use LibreHardwareMonitor when the hardware and drivers expose
   those readings.
